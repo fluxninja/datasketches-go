@@ -3,6 +3,8 @@ package sketches
 import (
 	"fmt"
 	"math"
+
+	"fluxninja.com/datasketches-go/sketches/util"
 )
 
 const (
@@ -15,7 +17,7 @@ const (
 )
 
 type DoublesSketch interface {
-	Update(v float64)
+	Update(v float64) error
 	Serialize() ([]byte, error)
 
 	IsDirect() bool
@@ -29,6 +31,14 @@ type DoublesSketch interface {
 	GetBitPattern() int64
 	GetMinValue() float64
 	GetMaxValue() float64
+
+	PutK(int32)
+	PutN(int64)
+	PutCombinedBuffer([]float64)
+	PutBaseBufferCount(int32)
+	PutBitPattern(int64)
+	PutMinValue(float64)
+	PutMaxValue(float64)
 }
 
 type heapDoublesSketch struct {
@@ -41,23 +51,19 @@ type heapDoublesSketch struct {
 	maxValue        float64
 }
 
-func (s *heapDoublesSketch) Update(v float64) {
-
-}
-
 func (s *heapDoublesSketch) IsDirect() bool {
-	// TODO
 	return false
 }
 
 func (s *heapDoublesSketch) IsCompact() bool {
-	// TODO
 	return false
 }
 
 func (s *heapDoublesSketch) IsEmpty() bool {
 	return s.n == 0
 }
+
+// GETS
 
 func (s *heapDoublesSketch) GetK() int32 {
 	return s.k
@@ -87,6 +93,36 @@ func (s *heapDoublesSketch) GetMaxValue() float64 {
 	return s.maxValue
 }
 
+// PUTS
+
+func (s *heapDoublesSketch) PutK(v int32) {
+	s.k = v
+}
+
+func (s *heapDoublesSketch) PutN(v int64) {
+	s.n = v
+}
+
+func (s *heapDoublesSketch) PutCombinedBuffer(v []float64) {
+	s.combinedBuffer = v
+}
+
+func (s *heapDoublesSketch) PutBaseBufferCount(v int32) {
+	s.baseBufferCount = v
+}
+
+func (s *heapDoublesSketch) PutBitPattern(v int64) {
+	s.bitPattern = v
+}
+
+func (s *heapDoublesSketch) PutMinValue(v float64) {
+	s.minValue = v
+}
+
+func (s *heapDoublesSketch) PutMaxValue(v float64) {
+	s.maxValue = v
+}
+
 func NewDoublesSketch(k int) (DoublesSketch, error) {
 	sketch := &heapDoublesSketch{}
 	k_ := int32(k)
@@ -97,22 +133,18 @@ func NewDoublesSketch(k int) (DoublesSketch, error) {
 		return nil, fmt.Errorf("k must be a power of 2, not lower than %v and not higher than %v (got %v)", MIN_K, MAX_K, k)
 	}
 
-	var baseBufAlloc int32 = 2 * MIN_K // original: min(MIN_K, k) with a comment "the min is important" -> ???
+	var baseBufAlloc int32 = 2 * MIN_K
 	sketch.k = k_
 	sketch.n = 0
 	sketch.combinedBuffer = make([]float64, baseBufAlloc)
 	sketch.baseBufferCount = 0
 	sketch.bitPattern = 0
-	sketch.minValue = math.NaN() // is this the same as java Double.NaN ?
+	sketch.minValue = math.NaN()
 	sketch.maxValue = math.NaN()
 
 	return sketch, nil
 }
 
 func validK(k int32) bool {
-	return isPowerOf2(k) && k >= MIN_K && k <= MAX_K
-}
-
-func isPowerOf2(x int32) bool {
-	return (x & (x - 1)) == 0
+	return util.IsPowerOf2(k) && k >= MIN_K && k <= MAX_K
 }

@@ -1,10 +1,10 @@
 package sketches
 
 import (
+	"encoding/base64"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-
-	"encoding/base64"
 )
 
 var _ = Describe("QuantilesDoublesSketch", func() {
@@ -13,15 +13,41 @@ var _ = Describe("QuantilesDoublesSketch", func() {
 		expectedSerialized := "AQMIBIAAAAA="
 
 		sketch, err := NewDoublesSketch(defaultK)
-		Expect(err).To(BeNil())
+		Expect(err).ToNot(HaveOccurred())
 		serializedBytes, err := sketch.Serialize()
-		Expect(err).To(BeNil())
+		Expect(err).ToNot(HaveOccurred())
 		serializedSketch := base64.StdEncoding.EncodeToString(serializedBytes)
 		Expect(serializedSketch).To(Equal(expectedSerialized))
-		/*
-			TODO
-			- empty flag is not set
-			- preLongs should be 1 and not 2 for empty sketch
-		*/
+	})
+
+	It("Serializes a sketch after updating a single value correctly", func() {
+		defaultK := 128
+		expectedSerialized := "AgMIAIAAAAABAAAAAAAAAAAAAAAAAEVAAAAAAAAARUAAAAAAAABFQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="
+
+		sketch, err := NewDoublesSketch(defaultK)
+		Expect(err).ToNot(HaveOccurred())
+		err = sketch.Update(42)
+		Expect(err).ToNot(HaveOccurred())
+		serializedBytes, err := sketch.Serialize()
+		Expect(err).ToNot(HaveOccurred())
+		serializedSketch := base64.StdEncoding.EncodeToString(serializedBytes)
+		Expect(serializedSketch).To(Equal(expectedSerialized))
+	})
+
+	It("Serialized a sketch after updating 100 values correctly", func() {
+		defaultK := 128
+		expectedSerialized := "AgMIAIAAAABkAAAAAAAAAAAAAAAAAAAAAAAAAADAWEAAAAAAAAAAAAAAAAAAAPA/AAAAAAAAAEAAAAAAAAAIQAAAAAAAABBAAAAAAAAAFEAAAAAAAAAYQAAAAAAAABxAAAAAAAAAIEAAAAAAAAAiQAAAAAAAACRAAAAAAAAAJkAAAAAAAAAoQAAAAAAAACpAAAAAAAAALEAAAAAAAAAuQAAAAAAAADBAAAAAAAAAMUAAAAAAAAAyQAAAAAAAADNAAAAAAAAANEAAAAAAAAA1QAAAAAAAADZAAAAAAAAAN0AAAAAAAAA4QAAAAAAAADlAAAAAAAAAOkAAAAAAAAA7QAAAAAAAADxAAAAAAAAAPUAAAAAAAAA+QAAAAAAAAD9AAAAAAAAAQEAAAAAAAIBAQAAAAAAAAEFAAAAAAACAQUAAAAAAAABCQAAAAAAAgEJAAAAAAAAAQ0AAAAAAAIBDQAAAAAAAAERAAAAAAACAREAAAAAAAABFQAAAAAAAgEVAAAAAAAAARkAAAAAAAIBGQAAAAAAAAEdAAAAAAACAR0AAAAAAAABIQAAAAAAAgEhAAAAAAAAASUAAAAAAAIBJQAAAAAAAAEpAAAAAAACASkAAAAAAAABLQAAAAAAAgEtAAAAAAAAATEAAAAAAAIBMQAAAAAAAAE1AAAAAAACATUAAAAAAAABOQAAAAAAAgE5AAAAAAAAAT0AAAAAAAIBPQAAAAAAAAFBAAAAAAABAUEAAAAAAAIBQQAAAAAAAwFBAAAAAAAAAUUAAAAAAAEBRQAAAAAAAgFFAAAAAAADAUUAAAAAAAABSQAAAAAAAQFJAAAAAAACAUkAAAAAAAMBSQAAAAAAAAFNAAAAAAABAU0AAAAAAAIBTQAAAAAAAwFNAAAAAAAAAVEAAAAAAAEBUQAAAAAAAgFRAAAAAAADAVEAAAAAAAABVQAAAAAAAQFVAAAAAAACAVUAAAAAAAMBVQAAAAAAAAFZAAAAAAABAVkAAAAAAAIBWQAAAAAAAwFZAAAAAAAAAV0AAAAAAAEBXQAAAAAAAgFdAAAAAAADAV0AAAAAAAABYQAAAAAAAQFhAAAAAAACAWEAAAAAAAMBYQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+
+		sketch, err := NewDoublesSketch(defaultK)
+		Expect(err).ToNot(HaveOccurred())
+		for i := 0; i < 100; i++ {
+			err = sketch.Update(float64(i))
+			Expect(err).ToNot(HaveOccurred())
+		}
+		serializedBytes, err := sketch.Serialize()
+		Expect(err).ToNot(HaveOccurred())
+		serializedSketch := base64.StdEncoding.EncodeToString(serializedBytes)
+		Expect(serializedSketch).To(Equal(expectedSerialized))
+
 	})
 })

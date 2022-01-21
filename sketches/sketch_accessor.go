@@ -1,11 +1,22 @@
 package sketches
 
+import (
+	"sort"
+
+	"fluxninja.com/datasketches-go/sketches/util"
+)
+
 const BB_LVL_IDX = -1
 
 type DoublesSketchAccessor interface {
 	SetLevel(level int32)
 	NumItems() int32
 	GetArray(fromIdx int32, numItems int32) []float64
+	PutArray(srcArray []float64, srcIndex, dstIndex, numItems int32)
+	Get(index int32) float64
+	Set(index int32, value float64) float64
+	Sort()
+	CopyAndSetLevel(level int32) DoublesSketchAccessor
 }
 
 type AbstractDoublesSketchAccessor struct {
@@ -36,6 +47,7 @@ func (acc *AbstractDoublesSketchAccessor) SetLevel(level int32) {
 			acc.offset = COMBINED_BUFFER
 		}
 	} else {
+		util.Assert(level >= 0, "level >= 0")
 		acc.numItems = 0
 		if acc.forceSize || ((acc.sketch.GetBitPattern() & (1 << level)) > 0) {
 			acc.numItems = acc.sketch.GetK()
@@ -58,12 +70,11 @@ func (acc *AbstractDoublesSketchAccessor) SetLevel(level int32) {
 func (acc *AbstractDoublesSketchAccessor) countValidLevelsBelow(level int32) int32 {
 	var count int32 = 0
 	var ubitPattern uint64 = uint64(acc.sketch.GetBitPattern())
-	var i int32 = 0
-	for (i < level) && (ubitPattern > 0) {
+	for i := int32(0); (i < level) && (ubitPattern > 0); i++ {
 		if (ubitPattern & 1) > 0 {
 			count++
 		}
-		i++
+
 		ubitPattern >>= 1
 	}
 	return count
@@ -71,7 +82,7 @@ func (acc *AbstractDoublesSketchAccessor) countValidLevelsBelow(level int32) int
 
 func NewDoublesSketchAccessor(sketch DoublesSketch, forceSize bool) DoublesSketchAccessor {
 	if sketch.IsDirect() {
-		// TODO: NewDirectDoublesSketchAccessor
+		// TODO: FLUX-1797, implement NewDirectDoublesSketchAccessor
 		return NewHeapDoublesSketchAccessor(sketch, forceSize, BB_LVL_IDX)
 	}
 	return NewHeapDoublesSketchAccessor(sketch, forceSize, BB_LVL_IDX)
@@ -85,6 +96,10 @@ func NewDirectDoublesSketchAccessor() *DirectDoublesSketchAccessor {
 
 type HeapDoublesSketchAccessor struct {
 	*AbstractDoublesSketchAccessor
+}
+
+func (acc *HeapDoublesSketchAccessor) CopyAndSetLevel(level int32) DoublesSketchAccessor {
+	return NewHeapDoublesSketchAccessor(acc.sketch, acc.forceSize, level)
 }
 
 func NewHeapDoublesSketchAccessor(sketch DoublesSketch, forceSize bool, level int32) *HeapDoublesSketchAccessor {
@@ -103,4 +118,29 @@ func (acc *HeapDoublesSketchAccessor) GetArray(fromIdx int32, numItems int32) []
 	x := make([]float64, numItems)
 	copy(x, acc.sketch.GetCombinedBuffer()[stIdx:stIdx+numItems])
 	return x
+}
+
+func (acc *HeapDoublesSketchAccessor) PutArray(srcArray []float64, srcIndex, dstIndex, numItems int32) {
+	var tgtIdx int32 = acc.offset + dstIndex
+	copy(acc.sketch.GetCombinedBuffer()[tgtIdx:tgtIdx+numItems], srcArray[srcIndex:srcIndex+numItems])
+}
+
+func (acc *HeapDoublesSketchAccessor) Get(index int32) float64 {
+	return acc.sketch.GetCombinedBuffer()[acc.offset+index]
+}
+
+func (acc *HeapDoublesSketchAccessor) Set(index int32, value float64) float64 {
+	idxOffset := acc.offset + index
+	oldVal := acc.sketch.GetCombinedBuffer()[idxOffset]
+	acc.sketch.GetCombinedBuffer()[idxOffset] = value
+
+	return oldVal
+}
+
+func (acc *HeapDoublesSketchAccessor) Sort() {
+	startIdx := acc.offset
+	endIdx := acc.offset + acc.NumItems()
+	if !acc.sketch.IsCompact() {
+		sort.Float64s(acc.sketch.GetCombinedBuffer()[startIdx:endIdx])
+	}
 }

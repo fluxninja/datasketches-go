@@ -1,11 +1,10 @@
 package sketches
 
 import (
-	"bytes"
 	"encoding/binary"
-	"math"
-	"math/bits"
 	"sort"
+
+	"fluxninja.com/datasketches-go/sketches/util"
 )
 
 // Byte addresses and bit masks
@@ -31,8 +30,7 @@ const (
 )
 
 func (s *heapDoublesSketch) Serialize() ([]byte, error) {
-	// TODO: determine native byteOrder
-	byteOrder := binary.LittleEndian
+	byteOrder := util.DetermineNativeByteOrder()
 	return s.toByteArray(false, false, byteOrder)
 }
 
@@ -40,7 +38,17 @@ func (s *heapDoublesSketch) toByteArray(compact bool, ordered bool, byteOrder bi
 	var preLongs int32 = 2
 	var extraSpaceForMinMax int32 = 2
 	var prePlusExtraBytes int32 = (preLongs + extraSpaceForMinMax) << 3
-	var flags int32 = 0 // TODO: set flags
+	var flags int32 = 0
+	if s.IsEmpty() {
+		flags |= EMPTY_FLAG_MASK
+		preLongs = 1
+	}
+	if compact {
+		flags |= COMPACT_FLAG_MASK
+	}
+	if ordered {
+		flags |= ORDERED_FLAG_MASK
+	}
 
 	var k int32 = s.k
 	var n int64 = s.n
@@ -49,7 +57,7 @@ func (s *heapDoublesSketch) toByteArray(compact bool, ordered bool, byteOrder bi
 
 	var outBytes int32
 	if compact {
-		// TODO: compact not supported yet
+		// TODO: FLUX-1797 compact not supported yet
 		outBytes = computeUpdateableStorageBytes(k, n)
 	} else {
 		outBytes = computeUpdateableStorageBytes(k, n)
@@ -63,24 +71,22 @@ func (s *heapDoublesSketch) toByteArray(compact bool, ordered bool, byteOrder bi
 	}
 
 	byteOrder.PutUint64(outByteArray[N_LONG:], uint64(n))
-	binaryPutFloat64(outByteArray[MIN_DOUBLE:], byteOrder, s.minValue)
-	binaryPutFloat64(outByteArray[MAX_DOUBLE:], byteOrder, s.maxValue)
+	util.BinaryPutFloat64(outByteArray[MIN_DOUBLE:], byteOrder, s.minValue)
+	util.BinaryPutFloat64(outByteArray[MAX_DOUBLE:], byteOrder, s.maxValue)
 
 	var memOffsetBytes int64 = int64(prePlusExtraBytes)
 
-	var bbCount int32 = computeBaseBufferItems(k, n)
+	var bbCount int32 = util.ComputeBaseBufferItems(k, n)
 
 	if bbCount > 0 {
 		var bbItemsArray []float64 = dsa.GetArray(0, bbCount)
 		if ordered {
 			sort.Float64s(bbItemsArray)
 		}
-		buf := &bytes.Buffer{}
-		err := binary.Write(buf, byteOrder, bbItemsArray)
+		err := util.BinaryPutFloat64Slice(outByteArray[memOffsetBytes:], byteOrder, bbItemsArray)
 		if err != nil {
 			return nil, err
 		}
-		copy(outByteArray[memOffsetBytes:], buf.Bytes())
 	}
 
 	furtherMemOffsetBits := 2 * int64(k)
@@ -89,22 +95,18 @@ func (s *heapDoublesSketch) toByteArray(compact bool, ordered bool, byteOrder bi
 	}
 	memOffsetBytes += furtherMemOffsetBits << 3
 
-	totalLevels := computeTotalLevels(s.bitPattern)
-	var level int32 = 0
-	for level < totalLevels {
+	totalLevels := util.ComputeTotalLevels(s.bitPattern)
+	for level := int32(0); level < totalLevels; level++ {
 		dsa.SetLevel(level)
 		if dsa.NumItems() > 0 {
+			util.Assert(dsa.NumItems() == k, "dsa.NumItems() == k")
 			floats := dsa.GetArray(0, k)
-			buf := &bytes.Buffer{}
-			err := binary.Write(buf, byteOrder, floats)
+			err := util.BinaryPutFloat64Slice(outByteArray[memOffsetBytes:], byteOrder, floats)
 			if err != nil {
 				return nil, err
 			}
-			copy(outByteArray[memOffsetBytes:], buf.Bytes())
 			memOffsetBytes += int64(k) << 3
 		}
-
-		level++
 	}
 
 	return outByteArray, nil
@@ -118,59 +120,15 @@ func insertPre0(outBytes []byte, byteOrder binary.ByteOrder, preLongs, flags, k 
 	byteOrder.PutUint16(outBytes[K_SHORT:], uint16(k))
 }
 
-func binaryPutFloat64(b []byte, byteOrder binary.ByteOrder, f float64) {
-	n := math.Float64bits(f)
-	byteOrder.PutUint64(b, n)
-}
-
-// P1: try directly, without 'writable memory'
-
 func computeUpdateableStorageBytes(k int32, n int64) int32 {
 	if n == 0 {
 		return 8
 	}
 	metaPre := MAX_PRELONGS + 2
-	totLevels := computeNumLevelsNeeded(k, n)
+	totLevels := util.ComputeNumLevelsNeeded(k, n)
 	if n <= int64(k) {
-		var ceil int32 = intmax(ceilingPowerOf2(int32(n)), MIN_K*2)
-		return metaPre + ceil<<3
+		var ceil int32 = util.Intmax(util.CeilingPowerOf2(int32(n)), MIN_K*2)
+		return (metaPre + ceil) << 3
 	}
-	return metaPre + (2+totLevels)*k<<3
-}
-
-func computeNumLevelsNeeded(k int32, n int64) int32 {
-	return 1 + hiBitPosition(n/int64(2*k))
-}
-
-func computeBaseBufferItems(k int32, n int64) int32 {
-	return int32(n % int64(2*k))
-}
-
-func computeTotalLevels(bitPattern int64) int32 {
-	return hiBitPosition(bitPattern) + 1
-}
-
-func hiBitPosition(x int64) int32 {
-	return 63 - int32(bits.LeadingZeros64(uint64(x)))
-}
-
-func ceilingPowerOf2(x int32) int32 {
-	if x <= 1 {
-		return 1
-	}
-	var topPowerOf2 int32 = 1 << 30
-	if x >= topPowerOf2 {
-		return topPowerOf2
-	}
-	ux := uint32(x)
-	lz := bits.LeadingZeros32(ux - 1)
-	p := 31 - lz
-	return 1 << p
-}
-
-func intmax(a, b int32) int32 {
-	if a > b {
-		return a
-	}
-	return b
+	return (metaPre + (2+totLevels)*k) << 3
 }
