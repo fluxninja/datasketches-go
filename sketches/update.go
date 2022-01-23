@@ -3,8 +3,8 @@ package sketches
 import (
 	"math"
 	"math/rand"
-	
-	"fluxninja.com/datasketches-go/sketches/util"
+
+	"github.com/fluxninja/datasketches-go/sketches/util"
 )
 
 func (s *heapDoublesSketch) Update(dataItem float64) error {

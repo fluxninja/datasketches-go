@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"sort"
 
-	"fluxninja.com/datasketches-go/sketches/util"
+	"github.com/fluxninja/datasketches-go/sketches/util"
 )
 
 // Byte addresses and bit masks

@@ -3,7 +3,7 @@ package sketches
 import (
 	"sort"
 
-	"fluxninja.com/datasketches-go/sketches/util"
+	"github.com/fluxninja/datasketches-go/sketches/util"
 )
 
 const BB_LVL_IDX = -1

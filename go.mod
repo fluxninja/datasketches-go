@@ -1,4 +1,4 @@
-module fluxninja.com/datasketches-go
+module github.com/fluxninja/datasketches-go
 
 go 1.17
 

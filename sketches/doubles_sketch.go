@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math"
 
-	"fluxninja.com/datasketches-go/sketches/util"
+	"github.com/fluxninja/datasketches-go/sketches/util"
 )
 
 const (
