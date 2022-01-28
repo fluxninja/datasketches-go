@@ -19,6 +19,7 @@ const (
 type DoublesSketch interface {
 	Update(v float64) error
 	Serialize() ([]byte, error)
+	SerializeCustom(bool) ([]byte, error)
 
 	IsDirect() bool
 	IsCompact() bool
