@@ -7,7 +7,7 @@ import (
 	"github.com/fluxninja/datasketches-go/sketches/util"
 )
 
-func (s *heapDoublesSketch) Update(dataItem float64) error {
+func (s *HeapDoublesSketch) Update(dataItem float64) error {
 	if math.IsNaN(dataItem) {
 		return nil
 	}
@@ -65,7 +65,7 @@ func (s *heapDoublesSketch) Update(dataItem float64) error {
 	return nil
 }
 
-func (s *heapDoublesSketch) growBaseBuffer() {
+func (s *HeapDoublesSketch) growBaseBuffer() {
 	var oldSize int32 = int32(len(s.combinedBuffer))
 	util.Assert(oldSize < (2*s.k), "oldSize < (2 * s.k)")
 	var baseBuffer []float64 = s.combinedBuffer
@@ -74,7 +74,7 @@ func (s *heapDoublesSketch) growBaseBuffer() {
 	copy(s.combinedBuffer, baseBuffer)
 }
 
-func (s *heapDoublesSketch) growCombinedBuffer(currentSpace int32, spaceNeeded int32) {
+func (s *HeapDoublesSketch) growCombinedBuffer(currentSpace int32, spaceNeeded int32) {
 	var combinedBuffer []float64 = s.combinedBuffer
 	s.combinedBuffer = make([]float64, spaceNeeded)
 	copy(s.combinedBuffer, combinedBuffer)

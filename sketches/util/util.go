@@ -53,6 +53,17 @@ func ComputeBitPattern(k int32, n int64) int64 {
 	return n / (2 * int64(k))
 }
 
+func ComputeRetainedItems(k int32, n int64) int32 {
+	bbCount := ComputeBaseBufferItems(k, n)
+	bitPattern := ComputeBitPattern(k, n)
+	validLevels := ComputeValidLevels(bitPattern)
+	return bbCount + (validLevels * k)
+}
+
+func ComputeValidLevels(bitPattern int64) int32 {
+	return int32(bits.OnesCount64(uint64(bitPattern)))
+}
+
 func hiBitPosition(x int64) int32 {
 	return 63 - int32(bits.LeadingZeros64(uint64(x)))
 }

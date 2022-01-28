@@ -29,12 +29,20 @@ const (
 	ORDERED_FLAG_MASK    = 16
 )
 
-func (s *heapDoublesSketch) Serialize() ([]byte, error) {
-	byteOrder := util.DetermineNativeByteOrder()
-	return s.toByteArray(false, false, byteOrder)
+type DoublesSketchImpl struct {
+	DoublesSketch
 }
 
-func (s *heapDoublesSketch) toByteArray(compact bool, ordered bool, byteOrder binary.ByteOrder) ([]byte, error) {
+func (s *DoublesSketchImpl) Serialize() ([]byte, error) {
+	return s.SerializeCustom(s.IsCompact())
+}
+
+func (s *DoublesSketchImpl) SerializeCustom(compact bool) ([]byte, error) {
+	byteOrder := util.DetermineNativeByteOrder()
+	return s.toByteArray(compact, compact, byteOrder)
+}
+
+func (s *DoublesSketchImpl) toByteArray(compact bool, ordered bool, byteOrder binary.ByteOrder) ([]byte, error) {
 	var preLongs int32 = 2
 	var extraSpaceForMinMax int32 = 2
 	var prePlusExtraBytes int32 = (preLongs + extraSpaceForMinMax) << 3
@@ -44,21 +52,20 @@ func (s *heapDoublesSketch) toByteArray(compact bool, ordered bool, byteOrder bi
 		preLongs = 1
 	}
 	if compact {
-		flags |= COMPACT_FLAG_MASK
+		flags |= COMPACT_FLAG_MASK | READ_ONLY_FLAG_MASK
 	}
 	if ordered {
 		flags |= ORDERED_FLAG_MASK
 	}
 
-	var k int32 = s.k
-	var n int64 = s.n
+	var k int32 = s.GetK()
+	var n int64 = s.GetN()
 
 	var dsa = NewDoublesSketchAccessor(s, !compact)
 
 	var outBytes int32
 	if compact {
-		// TODO: FLUX-1797 compact not supported yet
-		outBytes = computeUpdateableStorageBytes(k, n)
+		outBytes = computeCompactStorageBytes(k, n)
 	} else {
 		outBytes = computeUpdateableStorageBytes(k, n)
 	}
@@ -71,8 +78,8 @@ func (s *heapDoublesSketch) toByteArray(compact bool, ordered bool, byteOrder bi
 	}
 
 	byteOrder.PutUint64(outByteArray[N_LONG:], uint64(n))
-	util.BinaryPutFloat64(outByteArray[MIN_DOUBLE:], byteOrder, s.minValue)
-	util.BinaryPutFloat64(outByteArray[MAX_DOUBLE:], byteOrder, s.maxValue)
+	util.BinaryPutFloat64(outByteArray[MIN_DOUBLE:], byteOrder, s.GetMinValue())
+	util.BinaryPutFloat64(outByteArray[MAX_DOUBLE:], byteOrder, s.GetMaxValue())
 
 	var memOffsetBytes int64 = int64(prePlusExtraBytes)
 
@@ -95,7 +102,7 @@ func (s *heapDoublesSketch) toByteArray(compact bool, ordered bool, byteOrder bi
 	}
 	memOffsetBytes += furtherMemOffsetBits << 3
 
-	totalLevels := util.ComputeTotalLevels(s.bitPattern)
+	totalLevels := util.ComputeTotalLevels(s.GetBitPattern())
 	for level := int32(0); level < totalLevels; level++ {
 		dsa.SetLevel(level)
 		if dsa.NumItems() > 0 {
@@ -118,6 +125,14 @@ func insertPre0(outBytes []byte, byteOrder binary.ByteOrder, preLongs, flags, k 
 	outBytes[FAMILY_BYTE] = byte(QUANTILES_FAMILY_ID)
 	outBytes[FLAGS_BYTE] = byte(flags)
 	byteOrder.PutUint16(outBytes[K_SHORT:], uint16(k))
+}
+
+func computeCompactStorageBytes(k int32, n int64) int32 {
+	if n == 0 {
+		return 8
+	}
+	var metaPreLongs int32 = MAX_PRELONGS + 2
+	return (metaPreLongs + util.ComputeRetainedItems(k, n)) << 3
 }
 
 func computeUpdateableStorageBytes(k int32, n int64) int32 {
