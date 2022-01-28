@@ -29,16 +29,20 @@ const (
 	ORDERED_FLAG_MASK    = 16
 )
 
-func (s *heapDoublesSketch) Serialize() ([]byte, error) {
+type DoublesSketchImpl struct {
+	DoublesSketch
+}
+
+func (s *DoublesSketchImpl) Serialize() ([]byte, error) {
 	return s.SerializeCustom(s.IsCompact())
 }
 
-func (s *heapDoublesSketch) SerializeCustom(compact bool) ([]byte, error) {
+func (s *DoublesSketchImpl) SerializeCustom(compact bool) ([]byte, error) {
 	byteOrder := util.DetermineNativeByteOrder()
 	return s.toByteArray(compact, compact, byteOrder)
 }
 
-func (s *heapDoublesSketch) toByteArray(compact bool, ordered bool, byteOrder binary.ByteOrder) ([]byte, error) {
+func (s *DoublesSketchImpl) toByteArray(compact bool, ordered bool, byteOrder binary.ByteOrder) ([]byte, error) {
 	var preLongs int32 = 2
 	var extraSpaceForMinMax int32 = 2
 	var prePlusExtraBytes int32 = (preLongs + extraSpaceForMinMax) << 3
@@ -54,8 +58,8 @@ func (s *heapDoublesSketch) toByteArray(compact bool, ordered bool, byteOrder bi
 		flags |= ORDERED_FLAG_MASK
 	}
 
-	var k int32 = s.k
-	var n int64 = s.n
+	var k int32 = s.GetK()
+	var n int64 = s.GetN()
 
 	var dsa = NewDoublesSketchAccessor(s, !compact)
 
@@ -74,8 +78,8 @@ func (s *heapDoublesSketch) toByteArray(compact bool, ordered bool, byteOrder bi
 	}
 
 	byteOrder.PutUint64(outByteArray[N_LONG:], uint64(n))
-	util.BinaryPutFloat64(outByteArray[MIN_DOUBLE:], byteOrder, s.minValue)
-	util.BinaryPutFloat64(outByteArray[MAX_DOUBLE:], byteOrder, s.maxValue)
+	util.BinaryPutFloat64(outByteArray[MIN_DOUBLE:], byteOrder, s.GetMinValue())
+	util.BinaryPutFloat64(outByteArray[MAX_DOUBLE:], byteOrder, s.GetMaxValue())
 
 	var memOffsetBytes int64 = int64(prePlusExtraBytes)
 
@@ -98,7 +102,7 @@ func (s *heapDoublesSketch) toByteArray(compact bool, ordered bool, byteOrder bi
 	}
 	memOffsetBytes += furtherMemOffsetBits << 3
 
-	totalLevels := util.ComputeTotalLevels(s.bitPattern)
+	totalLevels := util.ComputeTotalLevels(s.GetBitPattern())
 	for level := int32(0); level < totalLevels; level++ {
 		dsa.SetLevel(level)
 		if dsa.NumItems() > 0 {
